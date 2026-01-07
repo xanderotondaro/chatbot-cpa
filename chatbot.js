@@ -12,6 +12,22 @@ const client = new Client({
   }
 })
 
+// Proteção: evitar que qualquer chamada da lib publique Status automaticamente.
+// Caso a API do whatsapp-web.js exponha métodos como setStatus/sendStatus etc.,
+// sobrescrevemos com no-ops para garantir que nada seja publicado.
+const noopStatusBlocker = async (...args) => {
+  console.log('Bloqueado: tentativa de publicar Status', ...args)
+  return null
+}
+// Lista de nomes comuns de métodos que podem publicar status
+const statusMethods = ['setStatus', 'sendStatus', 'postStatus', 'publishStatus', 'updateStatus']
+for (const name of statusMethods) {
+  try {
+    if (!client[name]) client[name] = noopStatusBlocker
+  } catch (e) {
+    // silencioso — se não puder sobrescrever, apenas continua
+  }
+}
 /* ========================
    QR CODE
 ======================== */
