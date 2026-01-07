@@ -12,22 +12,6 @@ const client = new Client({
   }
 })
 
-// Proteção: evitar que qualquer chamada da lib publique Status automaticamente.
-// Caso a API do whatsapp-web.js exponha métodos como setStatus/sendStatus etc.,
-// sobrescrevemos com no-ops para garantir que nada seja publicado.
-const noopStatusBlocker = async (...args) => {
-  console.log('Bloqueado: tentativa de publicar Status', ...args)
-  return null
-}
-// Lista de nomes comuns de métodos que podem publicar status
-const statusMethods = ['setStatus', 'sendStatus', 'postStatus', 'publishStatus', 'updateStatus']
-for (const name of statusMethods) {
-  try {
-    if (!client[name]) client[name] = noopStatusBlocker
-  } catch (e) {
-    // silencioso — se não puder sobrescrever, apenas continua
-  }
-}
 /* ========================
    QR CODE
 ======================== */
@@ -92,6 +76,7 @@ const validarFormulario = (texto) => {
 ======================== */
 client.on("message", async (msg) => {
   try {
+    if (!msg.body || msg.from.includes("status@broadcast")) return // ignora status 
     if (!msg.body || msg.from.includes("@g.us")) return // ignora grupos
 
     const texto = msg.body.trim().toLowerCase()
@@ -279,4 +264,28 @@ Digite *Menu* para voltar ao menu principal.`)
 /* ========================
    START BOT
 ======================== */
-client.initialize()
+// Inicializa o client com tentativas para mitigar erros de `Execution context was destroyed`.
+const startClient = async (retries = 5, delayMs = 3000) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      console.log(`Inicializando client (tentativa ${i + 1}/${retries})`)
+      await client.initialize()
+      console.log('Client inicializado com sucesso')
+      return
+    } catch (err) {
+      console.error('Erro ao inicializar client:', err && err.message ? err.message : err)
+      if (i < retries - 1) {
+        console.log(`Aguardando ${delayMs}ms antes de nova tentativa...`)
+        await delay(delayMs)
+      } else {
+        console.log('Todas as tentativas falharam. Veja mensagens acima para diagnóstico.')
+        throw err
+      }
+    }
+  }
+}
+
+startClient().catch((e) => {
+  console.error('Falha ao iniciar o bot:', e)
+  process.exit(1)
+})
