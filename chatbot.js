@@ -253,7 +253,9 @@ Digite *Menu* para voltar ao menu principal.`)
     }
 
     /* ===== FALLBACK ===== */
-    await msg.reply("Digite *oi* para iniciar o atendimento.")
+    if (!conversaFinalizada[msg.from]) {
+      await msg.reply("Digite *oi* para iniciar o atendimento.")
+    }
 
   } catch (err) {
     console.error("🔥 ERRO NO BOT:", err)
