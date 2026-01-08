@@ -76,10 +76,14 @@ const validarFormulario = (texto) => {
 ======================== */
 client.on("message", async (msg) => {
   try {
-    if (!msg.body || msg.from.includes("status@broadcast")) return // ignora status 
-    if (!msg.body || msg.from.includes("@g.us")) return // ignora grupos
+    if (msg.from.includes("status@broadcast")) return // ignora status 
+    if (msg.from.includes("@g.us")) return // ignora grupos
 
-    const texto = msg.body.trim().toLowerCase()
+    let texto = (msg.body || "").trim().toLowerCase()
+    if (msg.fromMe) return // ignora mensagens enviadas pelo próprio bot
+
+    // não usamos mais botões/listas interativas (compatibilidade com WhatsApp Business)
+
     const chat = await msg.getChat()
 
     console.log("📩 NOVA MSG:", msg.from, "->", texto)
@@ -229,31 +233,60 @@ Digite *Menu* para voltar ao menu principal.`)
       console.log("📦 DADOS RECEBIDOS:", texto)
       
       // Valida se o formulário foi preenchido corretamente
-      if (validarFormulario(msg.body)) {
-        dadosUsuario[msg.from] = msg.body
-        
-        await delay(800)
+          if (validarFormulario(msg.body)) {
+            dadosUsuario[msg.from] = msg.body
+                
+            await delay(800)
 
-        // Adiciona o contato aos favoritos
-        await chat.pin()
+            // Adiciona o contato aos favoritos
+            await chat.pin()
 
-        await msg.reply("✅ Dados recebidos! Em breve nossa equipe entra em contato.")
-        
-        // Finaliza a conversa com este contato específico
-        delete etapas[msg.from]
-        delete dadosUsuario[msg.from]
-        conversaFinalizada[msg.from] = true // marca como finalizada
-        
-        return
-      } else {
+            await msg.reply("✅ Dados recebidos! Agora, para prosseguir com o pagamento, siga as instruções abaixo.")
+                
+            await delay(500)
+            // Envia instruções de pagamento via PIX
+            await msg.reply(
+    `📌 PIX para pagamento:
+
+    PIX: 13615515420
+    Nome: Beatriz Campos Gois
+    Empresa: Mercado Pago
+
+    Por favor, após realizar o pagamento envie o comprovante neste chat.`
+            )
+
+            // Agora aguardamos o comprovante de pagamento
+            etapas[msg.from] = "aguardando_pagamento"
+            conversaFinalizada[msg.from] = false
+            // não apaga os dados do usuário ainda, iremos confirmar após validação
+                
+            return
+          } else {
         // Se não preencheu corretamente, pede novamente
         await msg.reply("⚠️ Formulário incompleto. Por favor, envie todos os dados solicitados:\n\nCPALEXANDRE\nLINK 🔗:\nDEPOSITANTES:\nMETA:\nMÉDIA:\nMONTANTE:\nVALOR ENVIADO:\nPRAZO:\n\nDigite *Menu* para voltar ao menu principal.")
         return
       }
     }
 
+    /* ===== PAGAMENTO ===== */
+    if (etapas[msg.from] === "aguardando_pagamento") {
+      // aceita comprovante via mídia (imagem) ou por palavras-chave na mensagem
+      if (msg.hasMedia || /comprovante|pago|pagamento|transferi/.test(texto)) {
+        await msg.reply("Em breve um de nossos atendente vai confirmar seu pagamento!")
+        // finaliza conversa
+        delete etapas[msg.from]
+        delete dadosUsuario[msg.from]
+        conversaFinalizada[msg.from] = true
+        return
+      } else {
+        return
+      }
+    }
+
     /* ===== FALLBACK ===== */
-    if (!conversaFinalizada[msg.from]) {
+    // Só responde fallback se a conversa não estiver finalizada, a mensagem
+    // não for do próprio bot e houver texto ou mídia (evita respostas ao apagar conversa)
+    if (!conversaFinalizada[msg.from] && !msg.fromMe && ((texto && texto.length > 0) || msg.hasMedia)) {
       await msg.reply("Digite *oi* para iniciar o atendimento.")
     }
 
